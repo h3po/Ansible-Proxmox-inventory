@@ -164,26 +164,26 @@ class ProxmoxAPI(object):
     def vms_by_type(self, node, type):
         return ProxmoxVMList(self.get('api2/json/nodes/{0}/{1}'.format(node, type)), self.version().get_version())
 
-    def vm_description_by_type(self, node, vm, type):
+    def vm_config_by_type(self, node, vm, type):
         return self.get('api2/json/nodes/{0}/{1}/{2}/config'.format(node, type, vm))
 
     def node_qemu(self, node):
         return self.vms_by_type(node, 'qemu')
 
     def node_qemu_description(self, node, vm):
-        return self.vm_description_by_type(node, vm, 'qemu')
+        return self.vm_config_by_type(node, vm, 'qemu')
 
     def node_lxc(self, node):
         return self.vms_by_type(node, 'lxc')
 
     def node_lxc_description(self, node, vm):
-        return self.vm_description_by_type(node, vm, 'lxc')
+        return self.vm_config_by_type(node, vm, 'lxc')
 
     def node_openvz(self, node):
         return self.vms_by_type(node, 'openvz')
 
     def node_openvz_description(self, node, vm):
-        return self.vm_description_by_type(node, vm, 'openvz')
+        return self.vm_config_by_type(node, vm, 'openvz')
 
     def pools(self):
         return ProxmoxPoolList(self.get('api2/json/pools'))
@@ -242,19 +242,25 @@ def main_list(options, config_path):
                 type = results['_meta']['hostvars'][vm]['proxmox_type']
             except KeyError:
                 type = 'qemu'
-            try:
-                description = proxmox_api.vm_description_by_type(node, vmid, type)['description']
-            except KeyError:
-                description = None
 
-            try:
-                metadata = json.loads(description)
-            except TypeError:
+            config = proxmox_api.vm_config_by_type(node, vmid, type)
+            description = config.pop("description", "")
+
+            if description:
+                try:
+                    metadata = json.loads(description.split("#metadata")[-1])
+                except Exception as e:
+                    print(e)
+                    print("error parsing metadata", node, vmid, description)
+                    metadata = {}
+
+                try:
+                    description = description.strip().split("#metadata")[0]
+                except:
+                    description = ""
+            else:
                 metadata = {}
-            except ValueError:
-                metadata = {
-                    'notes': description
-                }
+                description = ""
 
             if 'groups' in metadata:
                 # print metadata
@@ -275,7 +281,9 @@ def main_list(options, config_path):
                     }
                 results['running']['hosts'] += [vm]
 
-            results['_meta']['hostvars'][vm].update(metadata)
+            results['_meta']['hostvars'][vm]['proxmox_metadata'] = metadata
+            results['_meta']['hostvars'][vm]['proxmox_config'] = config
+            results['_meta']['hostvars'][vm]['proxmox_notes'] = description
 
     # pools
     for pool in proxmox_api.pools().get_names():
@@ -339,7 +347,6 @@ def main():
         indent = 2
 
     print((json.dumps(data, indent=indent)))
-
 
 if __name__ == '__main__':
     main()
