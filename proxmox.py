@@ -41,7 +41,6 @@ from six.moves.urllib.error import HTTPError
 
 from ansible.module_utils.urls import open_url
 
-
 class ProxmoxNodeList(list):
     def get_names(self):
         return [node['node'] for node in self]
@@ -250,8 +249,8 @@ def main_list(options, config_path):
                 try:
                     metadata = json.loads(description.split("#metadata")[-1])
                 except Exception as e:
-                    print(e)
-                    print("error parsing metadata", node, vmid, description)
+                    #print(e)
+                    #print("error parsing metadata", node, vmid, description)
                     metadata = {}
 
                 try:
