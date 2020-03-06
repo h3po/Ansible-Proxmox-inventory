@@ -202,20 +202,27 @@ class ProxmoxAPI(object):
     
     def qemu_ip_address(self, node, vm):
         ip_address = None
-        networks = self.get('api2/json/nodes/{0}/qemu/{1}/agent/network-get-interfaces'.format(node, vm))['result']
+        try:
+            networks = self.get('api2/json/nodes/{0}/qemu/{1}/agent/network-get-interfaces'.format(node, vm))['result']
+        except HTTPError:
+            return None
+            
         if networks:
             for network in networks:
                 if type(network) is dict:
-                    for address in network['ip-addresses']:
-                        ip_address = address['ip-address']
-                        try:
-                            # IP address validation
-                            if socket.inet_aton(ip_address):
-                                # Ignore localhost
-                                if ip_address != '127.0.0.1':
-                                    return ip_address
-                        except socket.error:
-                            pass
+                    try:
+                        for address in network['ip-addresses']:
+                            ip_address = address['ip-address']
+                            try:
+                                # IP address validation
+                                if socket.inet_aton(ip_address):
+                                    # Ignore localhost
+                                    if ip_address != '127.0.0.1':
+                                        return ip_address
+                            except socket.error:
+                                pass
+                    except KeyError:
+                        pass
         return None
     
     def openvz_ip_address(self, node, vm):
@@ -321,21 +328,29 @@ def main_list(options, config_path):
             # so you can: --limit 'running'
             status = results['_meta']['hostvars'][vm]['proxmox_status']
             if status == 'running':
+                #results['_meta']['hostvars'][vm]['enabled'] = True
                 if 'running' not in results:
                     results['running'] = {
                         'hosts': []
                     }
                 results['running']['hosts'] += [vm]
+            else:
+                pass#results['_meta']['hostvars'][vm]['enabled'] = False
 
             results['_meta']['hostvars'][vm]['proxmox_metadata'] = metadata
             results['_meta']['hostvars'][vm]['proxmox_config'] = config
             results['_meta']['hostvars'][vm]['proxmox_notes'] = description
+            results['_meta']['hostvars'][vm]['proxmox_node'] = node
 
     # pools
     for pool in proxmox_api.pools().get_names():
+        members = proxmox_api.pool(pool).get_members_name()
         results[pool] = {
-            'hosts': proxmox_api.pool(pool).get_members_name(),
+            'hosts': members,
         }
+
+        for host in members:
+            results['_meta']['hostvars'][host]['proxmox_pool'] = pool
 
     return results
 
